@@ -33,3 +33,4 @@ function ReqArt(artPath) {
   
   return mod;
 }
+module.exports = ReqArt;
