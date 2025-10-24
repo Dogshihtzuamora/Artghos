@@ -8,6 +8,15 @@ Artghos permite empacotar qualquer pacote npm (com todas suas dependências) em 
 
 ## 🚀 Instalação
 
+### 1. Clone o repositório
+
+```bash
+git clone https://github.com/Dogshihtzuamora/Artghos.git
+cd Artghos
+```
+
+### 2. Instale as dependências
+
 ```bash
 npm install tar
 ```
