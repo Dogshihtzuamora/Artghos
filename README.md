@@ -65,9 +65,7 @@ app.listen(3000);
 ```
 Artghos/
 ├── app.js              # Criador de pacotes .art
-├── Art/
-│   ├── index.js       # Exporta ReqArt
-│   └── ReqArt.js      # Carregador de pacotes .art
+├── Art.js              # Carregador de pacotes .art
 ├── art-packages/       # Pasta onde ficam os .art criados
 └── README.md
 ```
