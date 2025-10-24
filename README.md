@@ -36,10 +36,10 @@ Isso vai:
 
 ### 2. Carregar um pacote .art
 
-Use a função `ReqArt` no arquivo `Art/ReqArt.js` para carregar pacotes:
+Use a função `ReqArt` da pasta `Art` para carregar pacotes:
 
 ```javascript
-const ReqArt = require('./Art/ReqArt');
+const ReqArt = require('./Art');
 
 // Carrega o pacote
 const express = ReqArt('./art-packages/express.art');
@@ -66,6 +66,7 @@ app.listen(3000);
 Artghos/
 ├── app.js              # Criador de pacotes .art
 ├── Art/
+│   ├── index.js       # Exporta ReqArt
 │   └── ReqArt.js      # Carregador de pacotes .art
 ├── art-packages/       # Pasta onde ficam os .art criados
 └── README.md
@@ -84,7 +85,7 @@ Artghos/
 // node app.js axios
 
 // 2. Usar no código
-const ReqArt = require('./Art/ReqArt');
+const ReqArt = require('./Art');
 const axios = ReqArt('./art-packages/axios.art');
 
 axios.get('https://api.github.com/users/github')
