@@ -28,33 +28,98 @@ class ArtPacker {
     );
   }
 
-  // Verifica se o conteúdo contém padrões maliciosos
-  static scanForMaliciousContent(content) {
-    // Lista de padrões suspeitos (simplificada)
-    const suspiciousPatterns = [
-      /eval\s*\(/i,                    // eval()
-      /new\s+Function\s*\(/i,          // new Function()
-      /<script>/i,                     // <script> tags
-      /document\.write/i,              // document.write
-      /\bexec\s*\(/i,                  // exec()
-      /\bchild_process\b/i,            // child_process
-      /\bfs\s*\.\s*(write|append)/i,   // fs.write/append
-      /\brequire\s*\(\s*['"]child_process['"]\s*\)/i, // require('child_process')
-      /\bprocess\s*\.\s*env\b/i,       // process.env
-      /\bcrypto\s*\.\s*subtle\b/i      // crypto.subtle
+  // Verifica se o conteúdo contém padrões maliciosos com análise contextual
+  static scanForMaliciousContent(content, options = {}) {
+    // Bibliotecas confiáveis que podem usar APIs sensíveis legitimamente
+    const trustedPackages = options.trustedPackages || [
+      'child_process', 'fs-extra', 'shelljs', 'execa', 'cross-spawn',
+      'node-fetch', 'axios', 'request', 'got', 'superagent',
+      'crypto', 'bcrypt', 'jsonwebtoken', 'passport'
     ];
-
-    // Verifica cada padrão
-    for (const pattern of suspiciousPatterns) {
+    
+    // Verifica se é uma biblioteca confiável pelo package.json
+    let isPackageTrusted = false;
+    if (content.includes('"name":') && trustedPackages.some(pkg => content.includes(`"name": "${pkg}"`) || content.includes(`"name":"${pkg}"`))) {
+      isPackageTrusted = true;
+    }
+    
+    // Padrões de alto risco (sempre suspeitos)
+    const highRiskPatterns = [
+      { pattern: /eval\s*\(\s*[^\)]*(?:atob|decode|unescape|fromCharCode|String\.fromCharCode)/i, description: 'Execução de código ofuscado' },
+      { pattern: /<script>[^<]*(?:fetch|ajax|XMLHttpRequest|http|document\.location)/i, description: 'Script com comunicação externa' },
+      { pattern: /(?:fetch|ajax|http|curl)\s*\([^\)]*(?:evil|hack|malware|attack)/i, description: 'Requisição suspeita' },
+      { pattern: /(?:password|credential|token|key|secret)\s*=\s*['"][^'"]*['"].*(?:fetch|ajax|http|send)/i, description: 'Vazamento de credenciais' }
+    ];
+    
+    // Padrões de médio risco (suspeitos em contexto não confiável)
+    const mediumRiskPatterns = [
+      { pattern: /eval\s*\([^)]{20,}\)/i, description: 'Uso de eval com string longa' },
+      { pattern: /new\s+Function\s*\([^)]{20,}\)/i, description: 'Uso de Function constructor com string longa' },
+      { pattern: /document\.write\s*\([^)]*(?:script|iframe|object|embed)/i, description: 'Injeção de conteúdo dinâmico' },
+      { pattern: /\brequire\s*\(\s*['"]child_process['"]\s*\).*(?:\.exec|\.spawn).*(?:curl|wget|powershell|cmd|bash)/i, description: 'Execução de comandos de rede' }
+    ];
+    
+    // Padrões de baixo risco (legítimos em muitos casos)
+    const lowRiskPatterns = [
+      { pattern: /\bchild_process\b/i, description: 'Uso de child_process' },
+      { pattern: /\bfs\s*\.\s*(write|append)/i, description: 'Operações de escrita em arquivo' },
+      { pattern: /\bprocess\s*\.\s*env\b/i, description: 'Acesso a variáveis de ambiente' },
+      { pattern: /\bcrypto\s*\.\s*subtle\b/i, description: 'Uso de API de criptografia' }
+    ];
+    
+    // Sistema de pontuação de risco
+    let riskScore = 0;
+    const detectedPatterns = [];
+    
+    // Verifica padrões de alto risco (sempre suspeitos)
+    for (const {pattern, description} of highRiskPatterns) {
       if (pattern.test(content)) {
-        return {
-          isSuspicious: true,
-          reason: `Padrão suspeito detectado: ${pattern}`
-        };
+        riskScore += 100;
+        detectedPatterns.push(description);
       }
     }
+    
+    // Verifica padrões de médio risco
+    for (const {pattern, description} of mediumRiskPatterns) {
+      if (pattern.test(content)) {
+        riskScore += isPackageTrusted ? 10 : 50;
+        detectedPatterns.push(description);
+      }
+    }
+    
+    // Verifica padrões de baixo risco apenas se não for uma biblioteca confiável
+    if (!isPackageTrusted) {
+      for (const {pattern, description} of lowRiskPatterns) {
+        if (pattern.test(content)) {
+          riskScore += 20;
+          detectedPatterns.push(description);
+        }
+      }
+    }
+    
+    // Análise contextual para reduzir falsos positivos
+    if (content.includes('test') || content.includes('spec') || content.includes('jest') || content.includes('mocha')) {
+      // Provavelmente é um arquivo de teste, reduz o risco
+      riskScore = Math.floor(riskScore * 0.5);
+    }
+    
+    // Limiar de risco (ajustável)
+    const riskThreshold = options.riskThreshold || 70;
+    
+    if (riskScore >= riskThreshold) {
+      return {
+        isSuspicious: true,
+        reason: `Conteúdo suspeito detectado (pontuação de risco: ${riskScore})`,
+        detectedPatterns,
+        riskScore
+      };
+    }
 
-    return { isSuspicious: false };
+    return { 
+      isSuspicious: false,
+      riskScore,
+      detectedPatterns: detectedPatterns.length > 0 ? detectedPatterns : []
+    };
   }
 
   static pack(sourceDir, outputFile) {
@@ -70,30 +135,83 @@ class ArtPacker {
 
     // Verificar arquivos maliciosos antes de empacotar
     const suspiciousFiles = [];
+    const warningFiles = [];
+    
+    // Verificar se é uma biblioteca confiável pelo package.json
+    let packageInfo = {};
+    const packageJsonPath = path.join(sourceDir, 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      try {
+        packageInfo = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      } catch (e) {
+        // Ignorar erro de parse
+      }
+    }
+    
+    // Opções de verificação
+    const scanOptions = {
+      trustedPackages: [
+        'child_process', 'fs-extra', 'shelljs', 'execa', 'cross-spawn',
+        'node-fetch', 'axios', 'request', 'got', 'superagent',
+        'crypto', 'bcrypt', 'jsonwebtoken', 'passport'
+      ],
+      // Se for uma biblioteca conhecida, aumentar o limiar de risco
+      riskThreshold: packageInfo.name && packageInfo.name.startsWith('@') ? 90 : 70
+    };
     
     files.forEach(filePath => {
       const relativePath = path.relative(sourceDir, filePath);
       const content = fs.readFileSync(filePath, 'utf8');
       
-      // Verificar conteúdo malicioso
-      const scanResult = this.scanForMaliciousContent(content);
+      // Verificar conteúdo malicioso com o novo sistema
+      const scanResult = this.scanForMaliciousContent(content, scanOptions);
+      
       if (scanResult.isSuspicious) {
         suspiciousFiles.push({
           file: relativePath,
-          reason: scanResult.reason
+          reason: scanResult.reason,
+          patterns: scanResult.detectedPatterns,
+          riskScore: scanResult.riskScore
+        });
+      } else if (scanResult.riskScore > 30) {
+        // Arquivos com pontuação média são apenas avisos
+        warningFiles.push({
+          file: relativePath,
+          patterns: scanResult.detectedPatterns,
+          riskScore: scanResult.riskScore
         });
       }
       
       data.files[relativePath] = Buffer.from(content).toString('base64');
     });
 
-    // Se encontrou arquivos suspeitos, aborta o empacotamento
+    // Mostrar avisos para arquivos com risco médio
+    if (warningFiles.length > 0) {
+      console.warn('⚠️ Avisos de segurança (não bloqueantes):');
+      warningFiles.forEach(file => {
+        console.warn(`  - ${file.file}: Pontuação de risco ${file.riskScore}`);
+        if (file.patterns && file.patterns.length > 0) {
+          console.warn(`    Padrões detectados: ${file.patterns.join(', ')}`);
+        }
+      });
+    }
+
+    // Se encontrou arquivos suspeitos de alto risco, aborta o empacotamento
     if (suspiciousFiles.length > 0) {
-      console.error('⚠️ Arquivos suspeitos detectados:');
+      console.error('⚠️ Arquivos suspeitos de alto risco detectados:');
       suspiciousFiles.forEach(file => {
         console.error(`  - ${file.file}: ${file.reason}`);
+        if (file.patterns && file.patterns.length > 0) {
+          console.error(`    Padrões detectados: ${file.patterns.join(', ')}`);
+        }
       });
-      throw new Error('Empacotamento abortado devido a conteúdo suspeito');
+      
+      // Permitir forçar o empacotamento com a flag --force-pack
+      if (process.argv.includes('--force-pack')) {
+        console.warn('⚠️ Empacotando mesmo com conteúdo suspeito devido à flag --force-pack');
+      } else {
+        throw new Error('Empacotamento abortado devido a conteúdo suspeito de alto risco');
+      }
     }
 
     const json = JSON.stringify(data);
@@ -147,6 +265,46 @@ class ArtPacker {
     }
     fs.mkdirSync(targetDir, { recursive: true });
 
+    // Verificar se é uma biblioteca confiável pelo package.json
+    let packageInfo = {};
+    let isPackageTrusted = false;
+    
+    if (data.files['package.json']) {
+      try {
+        const packageJsonContent = Buffer.from(data.files['package.json'], 'base64').toString();
+        packageInfo = JSON.parse(packageJsonContent);
+        
+        // Lista de bibliotecas confiáveis
+        const trustedPackages = [
+          'child_process', 'fs-extra', 'shelljs', 'execa', 'cross-spawn',
+          'node-fetch', 'axios', 'request', 'got', 'superagent',
+          'crypto', 'bcrypt', 'jsonwebtoken', 'passport'
+        ];
+        
+        if (packageInfo.name && trustedPackages.includes(packageInfo.name)) {
+          isPackageTrusted = true;
+          console.log(`✓ Biblioteca confiável detectada: ${packageInfo.name}`);
+        }
+      } catch (e) {
+        // Ignorar erro de parse
+      }
+    }
+
+    // Opções de verificação
+    const scanOptions = {
+      trustedPackages: [
+        'child_process', 'fs-extra', 'shelljs', 'execa', 'cross-spawn',
+        'node-fetch', 'axios', 'request', 'got', 'superagent',
+        'crypto', 'bcrypt', 'jsonwebtoken', 'passport'
+      ],
+      // Se for uma biblioteca conhecida, aumentar o limiar de risco
+      riskThreshold: isPackageTrusted ? 90 : 70
+    };
+
+    // Extrair arquivos com verificação de segurança
+    const suspiciousFiles = [];
+    const warningFiles = [];
+
     Object.keys(data.files).forEach(relativePath => {
       const fullPath = path.join(targetDir, relativePath);
       const dir = path.dirname(fullPath);
@@ -158,16 +316,59 @@ class ArtPacker {
       const content = Buffer.from(data.files[relativePath], 'base64');
       
       // Verificação adicional de segurança para arquivos JavaScript
-      if (relativePath.endsWith('.js') || relativePath.endsWith('.mjs')) {
+      if (relativePath.endsWith('.js') || relativePath.endsWith('.mjs') || relativePath.endsWith('.cjs')) {
         const contentStr = content.toString('utf8');
-        const scanResult = this.scanForMaliciousContent(contentStr);
+        const scanResult = this.scanForMaliciousContent(contentStr, scanOptions);
+        
         if (scanResult.isSuspicious) {
-          throw new Error(`Arquivo suspeito detectado: ${relativePath} - ${scanResult.reason}`);
+          suspiciousFiles.push({
+            file: relativePath,
+            reason: scanResult.reason,
+            patterns: scanResult.detectedPatterns,
+            riskScore: scanResult.riskScore
+          });
+          // Não extrair arquivos suspeitos de alto risco
+          return;
+        } else if (scanResult.riskScore > 30) {
+          warningFiles.push({
+            file: relativePath,
+            patterns: scanResult.detectedPatterns,
+            riskScore: scanResult.riskScore
+          });
         }
       }
       
       fs.writeFileSync(fullPath, content);
     });
+    
+    // Mostrar avisos para arquivos com risco médio
+    if (warningFiles.length > 0) {
+      console.warn('⚠️ Avisos de segurança (não bloqueantes):');
+      warningFiles.forEach(file => {
+        console.warn(`  - ${file.file}: Pontuação de risco ${file.riskScore}`);
+        if (file.patterns && file.patterns.length > 0) {
+          console.warn(`    Padrões detectados: ${file.patterns.join(', ')}`);
+        }
+      });
+    }
+    
+    // Se encontrou arquivos suspeitos de alto risco, aborta o desempacotamento
+    if (suspiciousFiles.length > 0) {
+      console.error('⚠️ Arquivos suspeitos de alto risco detectados:');
+      suspiciousFiles.forEach(file => {
+        console.error(`  - ${file.file}: ${file.reason}`);
+        if (file.patterns && file.patterns.length > 0) {
+          console.error(`    Padrões detectados: ${file.patterns.join(', ')}`);
+        }
+      });
+      
+      // Permitir forçar o desempacotamento com a flag --force-unpack
+      if (process.argv.includes('--force-unpack')) {
+        console.warn('⚠️ Desempacotando mesmo com conteúdo suspeito devido à flag --force-unpack');
+      } else {
+        throw new Error('Desempacotamento abortado devido a conteúdo suspeito de alto risco');
+      }
+    }
 
     console.log(`✓ Verificação de integridade concluída: ${artFile}`);
     return data.metadata;
