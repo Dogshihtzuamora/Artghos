@@ -2,34 +2,145 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { execSync } = require('child_process');
+const { createRequire } = require('module');
+const crypto = require('crypto');
 
 class ArtPacker {
+  // Chave secreta para assinatura (em produção, deve ser armazenada de forma segura)
+  static getSecretKey() {
+    // Em produção, isso deve vir de uma variável de ambiente ou arquivo seguro
+    return 'artghos-security-key-2023';
+  }
+
+  // Gera uma assinatura digital para o conteúdo
+  static createSignature(content) {
+    const hmac = crypto.createHmac('sha256', this.getSecretKey());
+    hmac.update(content);
+    return hmac.digest('hex');
+  }
+
+  // Verifica a assinatura digital
+  static verifySignature(content, signature) {
+    const expectedSignature = this.createSignature(content);
+    return crypto.timingSafeEqual(
+      Buffer.from(expectedSignature, 'hex'),
+      Buffer.from(signature, 'hex')
+    );
+  }
+
+  // Verifica se o conteúdo contém padrões maliciosos
+  static scanForMaliciousContent(content) {
+    // Lista de padrões suspeitos (simplificada)
+    const suspiciousPatterns = [
+      /eval\s*\(/i,                    // eval()
+      /new\s+Function\s*\(/i,          // new Function()
+      /<script>/i,                     // <script> tags
+      /document\.write/i,              // document.write
+      /\bexec\s*\(/i,                  // exec()
+      /\bchild_process\b/i,            // child_process
+      /\bfs\s*\.\s*(write|append)/i,   // fs.write/append
+      /\brequire\s*\(\s*['"]child_process['"]\s*\)/i, // require('child_process')
+      /\bprocess\s*\.\s*env\b/i,       // process.env
+      /\bcrypto\s*\.\s*subtle\b/i      // crypto.subtle
+    ];
+
+    // Verifica cada padrão
+    for (const pattern of suspiciousPatterns) {
+      if (pattern.test(content)) {
+        return {
+          isSuspicious: true,
+          reason: `Padrão suspeito detectado: ${pattern}`
+        };
+      }
+    }
+
+    return { isSuspicious: false };
+  }
+
   static pack(sourceDir, outputFile) {
     const files = this.collectFiles(sourceDir);
     const data = {
       files: {},
       metadata: {
         created: new Date().toISOString(),
-        fileCount: files.length
+        fileCount: files.length,
+        packageName: path.basename(sourceDir)
       }
     };
 
+    // Verificar arquivos maliciosos antes de empacotar
+    const suspiciousFiles = [];
+    
     files.forEach(filePath => {
       const relativePath = path.relative(sourceDir, filePath);
-      const content = fs.readFileSync(filePath);
-      data.files[relativePath] = content.toString('base64');
+      const content = fs.readFileSync(filePath, 'utf8');
+      
+      // Verificar conteúdo malicioso
+      const scanResult = this.scanForMaliciousContent(content);
+      if (scanResult.isSuspicious) {
+        suspiciousFiles.push({
+          file: relativePath,
+          reason: scanResult.reason
+        });
+      }
+      
+      data.files[relativePath] = Buffer.from(content).toString('base64');
     });
 
+    // Se encontrou arquivos suspeitos, aborta o empacotamento
+    if (suspiciousFiles.length > 0) {
+      console.error('⚠️ Arquivos suspeitos detectados:');
+      suspiciousFiles.forEach(file => {
+        console.error(`  - ${file.file}: ${file.reason}`);
+      });
+      throw new Error('Empacotamento abortado devido a conteúdo suspeito');
+    }
+
     const json = JSON.stringify(data);
-    const compressed = zlib.gzipSync(json);
+    
+    // Adicionar assinatura digital
+    const signature = this.createSignature(json);
+    const secureData = {
+      data: json,
+      signature: signature,
+      version: '1.0'
+    };
+    
+    const secureJson = JSON.stringify(secureData);
+    const compressed = zlib.gzipSync(secureJson);
 
     fs.writeFileSync(outputFile, compressed);
+    console.log(`✓ Pacote assinado digitalmente: ${outputFile}`);
   }
 
   static unpack(artFile, targetDir) {
     const compressed = fs.readFileSync(artFile);
-    const json = zlib.gunzipSync(compressed).toString();
-    const data = JSON.parse(json);
+    const secureJson = zlib.gunzipSync(compressed).toString();
+    let secureData;
+    
+    try {
+      secureData = JSON.parse(secureJson);
+    } catch (error) {
+      throw new Error(`Arquivo .art inválido: ${error.message}`);
+    }
+    
+    // Verificar se é um arquivo .art seguro
+    if (!secureData.signature || !secureData.data) {
+      throw new Error('Arquivo .art não possui assinatura digital');
+    }
+    
+    // Verificar assinatura
+    try {
+      const isValid = this.verifySignature(secureData.data, secureData.signature);
+      if (!isValid) {
+        throw new Error('Assinatura digital inválida. O arquivo pode ter sido adulterado.');
+      }
+    } catch (error) {
+      throw new Error(`Erro ao verificar assinatura: ${error.message}`);
+    }
+    
+    // Desempacotar dados
+    const data = JSON.parse(secureData.data);
 
     if (fs.existsSync(targetDir)) {
       fs.rmSync(targetDir, { recursive: true, force: true });
@@ -45,9 +156,20 @@ class ArtPacker {
       }
 
       const content = Buffer.from(data.files[relativePath], 'base64');
+      
+      // Verificação adicional de segurança para arquivos JavaScript
+      if (relativePath.endsWith('.js') || relativePath.endsWith('.mjs')) {
+        const contentStr = content.toString('utf8');
+        const scanResult = this.scanForMaliciousContent(contentStr);
+        if (scanResult.isSuspicious) {
+          throw new Error(`Arquivo suspeito detectado: ${relativePath} - ${scanResult.reason}`);
+        }
+      }
+      
       fs.writeFileSync(fullPath, content);
     });
 
+    console.log(`✓ Verificação de integridade concluída: ${artFile}`);
     return data.metadata;
   }
 
@@ -101,11 +223,81 @@ function ReqArt(artPath) {
   const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
   const entryPoint = path.resolve(tempExtractDir, pkgJson.main || 'index.js');
 
-  let loadedModule = require(entryPoint);
+  // Verificar se o módulo é ESM ou CommonJS
+  const isESM = pkgJson.type === 'module' || 
+                entryPoint.endsWith('.mjs') || 
+                (fs.existsSync(entryPoint) && 
+                 fs.readFileSync(entryPoint, 'utf8').includes('export '));
 
-  // FIX: Lidar com módulos que exportam como { default: ... }
-  if (loadedModule && typeof loadedModule === 'object' && loadedModule.default) {
-    loadedModule = loadedModule.default;
+  let loadedModule;
+
+  if (isESM) {
+    // Para módulos ESM, usamos dynamic import
+    const importPath = `file://${entryPoint.replace(/\\/g, '/')}`;
+    
+    // Como dynamic import é assíncrono, precisamos usar uma abordagem síncrona
+    // Criamos um arquivo temporário para carregar o módulo ESM
+    const tempLoaderPath = path.join(tempExtractDir, '_temp_esm_loader.cjs');
+    const loaderContent = `
+      const { pathToFileURL } = require('url');
+      const fs = require('fs');
+      
+      async function loadModule() {
+        try {
+          const module = await import(pathToFileURL('${entryPoint.replace(/\\/g, '\\\\')}'));
+          fs.writeFileSync('${path.join(tempExtractDir, '_esm_result.json').replace(/\\/g, '\\\\')}', 
+                          JSON.stringify({ success: true, isObject: typeof module === 'object' }));
+        } catch (error) {
+          fs.writeFileSync('${path.join(tempExtractDir, '_esm_result.json').replace(/\\/g, '\\\\')}', 
+                          JSON.stringify({ success: false, error: error.message }));
+        }
+      }
+      
+      loadModule();
+    `;
+    
+    fs.writeFileSync(tempLoaderPath, loaderContent);
+    
+    try {
+      execSync(`node "${tempLoaderPath}"`, { stdio: 'ignore' });
+      
+      // Verificar o resultado
+      const resultPath = path.join(tempExtractDir, '_esm_result.json');
+      if (fs.existsSync(resultPath)) {
+        const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+        
+        if (result.success) {
+          // Como não podemos retornar o módulo ESM diretamente (é assíncrono),
+          // retornamos um proxy que avisa o usuário que precisa usar await
+          loadedModule = {
+            __artghosESMModule: true,
+            __modulePath: importPath,
+            async import() {
+              return import(importPath);
+            },
+            // Método para facilitar o uso
+            toString() {
+              return '[Artghos ESM Module] Use await module.import() para carregar este módulo ESM';
+            }
+          };
+        } else {
+          throw new Error(`Erro ao carregar módulo ESM: ${result.error}`);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar módulo ESM:', error);
+      // Fallback para CommonJS se falhar
+      const customRequire = createRequire(__filename);
+      loadedModule = customRequire(entryPoint);
+    }
+  } else {
+    // Para módulos CommonJS, usamos require normal
+    loadedModule = require(entryPoint);
+    
+    // FIX: Lidar com módulos que exportam como { default: ... }
+    if (loadedModule && typeof loadedModule === 'object' && loadedModule.default) {
+      loadedModule = loadedModule.default;
+    }
   }
 
   artModuleCache.set(resolvedPath, loadedModule);
@@ -180,6 +372,7 @@ ReqArt.install = function(packageName, version = 'latest') {
   return artFilePath;
 };
 
+ReqArt.ArtPacker = ArtPacker;
 module.exports = ReqArt;
 
 if (require.main === module) {

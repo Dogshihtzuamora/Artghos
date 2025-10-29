@@ -23,15 +23,15 @@ npm install artghos
 ### Criar um pacote .art
 
 ```bash
-artghos <nome-do-pacote> [versao]
+artghos install <nome-do-pacote> [versao]
 ```
 
 **Exemplos:**
 ```bash
-artghos express
-artghos express 4.18.0
-artghos lodash latest
-artghos hyperswarm
+artghos install express
+artghos install express 4.18.0
+artghos install lodash latest
+artghos install hyperswarm
 ```
 
 Isso gera um arquivo `.art` em `./art-packages/`
