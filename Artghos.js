@@ -22,7 +22,7 @@ class ArtPacker {
 
     const json = JSON.stringify(data);
     const compressed = zlib.gzipSync(json);
-    
+
     fs.writeFileSync(outputFile, compressed);
   }
 
@@ -39,11 +39,11 @@ class ArtPacker {
     Object.keys(data.files).forEach(relativePath => {
       const fullPath = path.join(targetDir, relativePath);
       const dir = path.dirname(fullPath);
-      
+
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      
+
       const content = Buffer.from(data.files[relativePath], 'base64');
       fs.writeFileSync(fullPath, content);
     });
@@ -72,33 +72,46 @@ class ArtPacker {
 const artModuleCache = new Map();
 
 function ReqArt(artPath) {
-  if (artModuleCache.has(artPath)) {
-    return artModuleCache.get(artPath);
+  // Resolve o caminho automaticamente
+  let resolvedPath = artPath;
+
+  // Se não termina com .art e não é um caminho absoluto/relativo, adiciona o diretório padrão
+  if (!artPath.endsWith('.art') && !artPath.startsWith('./') && !artPath.startsWith('../') && !path.isAbsolute(artPath)) {
+    resolvedPath = path.join('./art-packages', `${artPath}.art`);
   }
 
-  if (!fs.existsSync(artPath)) {
-    throw new Error(`Arquivo ${artPath} não encontrado`);
+  if (artModuleCache.has(resolvedPath)) {
+    return artModuleCache.get(resolvedPath);
   }
 
-  const tempExtractDir = path.join('./art-packages', '.reqart-temp', path.basename(artPath, '.art'));
-  
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`Arquivo ${resolvedPath} não encontrado`);
+  }
+
+  const tempExtractDir = path.join('./art-packages', '.reqart-temp', path.basename(resolvedPath, '.art'));
+
   if (fs.existsSync(tempExtractDir)) {
     fs.rmSync(tempExtractDir, { recursive: true, force: true });
   }
   fs.mkdirSync(tempExtractDir, { recursive: true });
 
-  ArtPacker.unpack(artPath, tempExtractDir);
+  ArtPacker.unpack(resolvedPath, tempExtractDir);
 
   const pkgJsonPath = path.join(tempExtractDir, 'package.json');
   const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
   const entryPoint = path.resolve(tempExtractDir, pkgJson.main || 'index.js');
 
-  const loadedModule = require(entryPoint);
-  
-  artModuleCache.set(artPath, loadedModule);
-  
+  let loadedModule = require(entryPoint);
+
+  // FIX: Lidar com módulos que exportam como { default: ... }
+  if (loadedModule && typeof loadedModule === 'object' && loadedModule.default) {
+    loadedModule = loadedModule.default;
+  }
+
+  artModuleCache.set(resolvedPath, loadedModule);
+
   fs.rmSync(tempExtractDir, { recursive: true, force: true });
-  
+
   return loadedModule;
 }
 
@@ -172,11 +185,11 @@ module.exports = ReqArt;
 if (require.main === module) {
   const packageName = process.argv[2];
   const version = process.argv[3] || 'latest';
-  
+
   if (!packageName) {
     console.log('Uso: node index.js <pacote> [versao]');
     process.exit(1);
   }
-  
+
   ReqArt.install(packageName, version);
-}
+        }
