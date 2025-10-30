@@ -53,6 +53,10 @@ app.get('/', (req, res) => res.send('Olá via .art!'));
 app.listen(3000);
 ```
 
+### Observações importantes
+- `express` possui whitelist de segurança ativa: arquivos marcados como “alto risco” dentro do pacote e em `node_modules/` são escritos e o processo não aborta. Os avisos permanecem nos logs.
+- Para outros pacotes, se o scanner marcar alto risco, execute seu script com `--force-unpack` para permitir a escrita dos arquivos e prosseguir.
+
 ## ✨ Vantagens
 
 - ✅ **Portável**: Um único arquivo com tudo incluído
@@ -85,6 +89,20 @@ artghos install express --force-pack
 node seu-script.js --force-unpack
 ```
 
+### Assinatura Digital e Chave Secreta
+- Todo `.art` é assinado digitalmente (HMAC-SHA256) durante o empacotamento.
+- Prioridade da chave secreta:
+  1. `ARTGHOS_SECRET_KEY` (variável de ambiente)
+  2. `artghos.config.json` (na raiz)
+  3. Chave padrão de desenvolvimento (gera aviso)
+- Após empacotar, a assinatura é verificada para confirmar integridade.
+
+### Comportamento com Conteúdo Suspeito
+- Empacotamento: arquivos de alto risco abortam, a menos que `--force-pack` seja usado.
+- Desempacotamento:
+  - Por padrão, arquivos de alto risco abortam; com `--force-unpack`, eles são escritos.
+  - Para `express`, há whitelist: desempacota sem `--force-unpack`, mantendo avisos para auditoria.
+
 ## 🔄 Suporte a ESM e CommonJS
 
 Artghos agora suporta completamente tanto módulos CommonJS quanto ESM:
@@ -105,6 +123,10 @@ const chalk = ReqArt('chalk');
 const chalkModule = await chalk.import();
 console.log(chalkModule.default.green('Sucesso!'));
 ```
+
+### Resolução de Dependências e Diretório Temporário
+- O carregamento usa `createRequire` para garantir resolução de módulos CommonJS relativa ao ponto de entrada.
+- O diretório temporário de extração (`art-packages/.reqart-temp/<pacote>`) permanece acessível até o encerramento do processo, permitindo resolver dependências sob demanda.
 
 ## 📖 Exemplos
 
@@ -197,13 +219,12 @@ const crossEnv = ReqArt('cross-env');
 
 ### Exemplo com flags de segurança
 
-```javascript
-// Para forçar o empacotamento de uma biblioteca com avisos de segurança
-// $ artghos install biblioteca-suspeita --force-pack
+```bash
+# Empacotar forçando mesmo com avisos de segurança
+artghos install lodash latest --force-pack
 
-```
-// Para forçar o carregamento de uma biblioteca com avisos de segurança
-// $ node seu-script.js --force-unpack
+# Carregar forçando escrita de arquivos marcados como alto risco
+node seu-script.js --force-unpack
 ```
 
 ## ⚡ Performance
@@ -220,6 +241,23 @@ Cargas seguintes (cache):    ~0.03ms (13,000x mais rápido!)
 ```
 
 O cache em memória torna carregamentos subsequentes praticamente instantâneos.
+
+## 🧪 Teste Rápido
+
+### Express (sem `--force-unpack`)
+```bash
+node ./asd/index.js
+# Abra http://localhost:3000/
+```
+
+### Lodash
+```bash
+# Na raiz
+node ./Artghos.js lodash latest --force-pack
+
+# Carregar via ReqArt
+node -e "const ReqArt=require('./Artghos.js'); const _=ReqArt('lodash'); console.log(_.capitalize('artghos funcionando com lodash'));" -- --force-unpack
+```
 
 ## 📄 Licença
 
