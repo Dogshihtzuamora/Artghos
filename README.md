@@ -242,23 +242,6 @@ Cargas seguintes (cache):    ~0.03ms (13,000x mais rápido!)
 
 O cache em memória torna carregamentos subsequentes praticamente instantâneos.
 
-## 🧪 Teste Rápido
-
-### Express (sem `--force-unpack`)
-```bash
-node ./asd/index.js
-# Abra http://localhost:3000/
-```
-
-### Lodash
-```bash
-# Na raiz
-node ./Artghos.js lodash latest --force-pack
-
-# Carregar via ReqArt
-node -e "const ReqArt=require('./Artghos.js'); const _=ReqArt('lodash'); console.log(_.capitalize('artghos funcionando com lodash'));" -- --force-unpack
-```
-
 ## 📄 Licença
 
 MIT © Artghos
