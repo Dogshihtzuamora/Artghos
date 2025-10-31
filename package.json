@@ -1,0 +1,29 @@
+{
+  "name": "artghos",
+  "version": "1.2.3",
+  "description": "Sistema de empacotamento e carregamento de pacotes Node.js em formato `.art`",
+  "main": "Artghos.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dogshihtzuamora/Artghos.git"
+  },
+  "keywords": [
+    "artghos",
+    "node",
+    "package",
+    "empacotamento"
+  ],
+  "bin": {
+    "artghos": "./index.js"
+  },
+  "author": "dogshihtzuamora",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/dogshihtzuamora/Artghos/issues"
+  },
+  "homepage": "https://github.com/dogshihtzuamora/Artghos#readme"
+}
