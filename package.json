@@ -1,6 +1,6 @@
 {
   "name": "artghos",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Sistema de empacotamento e carregamento de pacotes Node.js em formato `.art`",
   "main": "Artghos.js",
   "scripts": {
