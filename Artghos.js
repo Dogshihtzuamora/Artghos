@@ -667,6 +667,14 @@ function ReqArt(artPath) {
         return loadedModule.default;
       }
     }
+    
+    // Tratamento especial para o pacote axios
+    if (pkgName === 'axios') {
+      // Se for o axios e tiver default, retornar o default diretamente
+      if (loadedModule && loadedModule.default) {
+        return loadedModule.default;
+      }
+    }
 
     // Tratamento universal para módulos com exports.default
     if (loadedModule && typeof loadedModule === 'object') {
