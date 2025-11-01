@@ -1,6 +1,6 @@
 {
   "name": "artghos",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Sistema de empacotamento e carregamento de pacotes Node.js em formato `.art`",
   "main": "Artghos.js",
   "files": [
@@ -32,6 +32,6 @@
   },
   "homepage": "https://github.com/dogshihtzuamora/Artghos#readme",
   "dependencies": {
-    "artghos": "^1.2.6"
+    "artghos": "^1.2.7"
   }
 }

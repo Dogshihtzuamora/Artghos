@@ -583,17 +583,20 @@ function ReqArt(artPath) {
   const entryPoint = path.resolve(tempExtractDir, pkgJson.main || 'index.js');
 
   // Verificar se o módulo é ESM ou CommonJS
-  const isESM = pkgJson.type === 'module' || 
+  // Tratamento especial para o axios que deve ser tratado como CommonJS
+  const pkgName = path.basename(tempExtractDir);
+  const isESM = pkgName !== 'axios' && (
+                pkgJson.type === 'module' || 
                 entryPoint.endsWith('.mjs') || 
                 (fs.existsSync(entryPoint) && 
-                 fs.readFileSync(entryPoint, 'utf8').includes('export '));
+                 fs.readFileSync(entryPoint, 'utf8').includes('export ')));
+
 
   let loadedModule;
 
   if (isESM) {
     // Para módulos ESM, usamos dynamic import
-    const importPath = `file://${entryPoint.replace(/\\/g, '/')}`;
-    
+    const importPath = `file://${entryPoint.replace(/\\/g, '/')}`;    
     // Como dynamic import é assíncrono, precisamos usar uma abordagem síncrona
     // Criamos um arquivo temporário para carregar o módulo ESM
     const tempLoaderPath = path.join(tempExtractDir, '_temp_esm_loader.cjs');
@@ -653,10 +656,40 @@ function ReqArt(artPath) {
     // Para módulos CommonJS, usar require com contexto do entryPoint
     const customRequire = createRequire(entryPoint);
     loadedModule = customRequire(entryPoint);
-    
-    // FIX: Lidar com módulos que exportam como { default: ... }
+
+    // Tratamento especial para axios e outros módulos com exports.default
     if (loadedModule && typeof loadedModule === 'object' && loadedModule.default) {
-      loadedModule = loadedModule.default;
+      // Se for o axios ou outro módulo com default
+      if (typeof loadedModule.default === 'function') {
+        // Para funções como axios, criar uma função que mantém as propriedades
+        const wrappedFunction = function(...args) {
+          return loadedModule.default(...args);
+        };
+        
+        // Copiar todas as propriedades do default para a função
+        Object.assign(wrappedFunction, loadedModule.default);
+        
+        // Copiar todas as propriedades do módulo original
+        Object.keys(loadedModule).forEach(key => {
+          if (key !== 'default') {
+            wrappedFunction[key] = loadedModule[key];
+          }
+        });
+        
+        return wrappedFunction;
+      } else if (typeof loadedModule.default === 'object' && loadedModule.default !== null) {
+        // Para objetos, combinar as propriedades
+        const combinedModule = {...loadedModule};
+        
+        // Adicionar todas as propriedades do default ao módulo principal
+        Object.keys(loadedModule.default).forEach(key => {
+          if (!(key in combinedModule)) {
+            combinedModule[key] = loadedModule.default[key];
+          }
+        });
+        
+        return combinedModule;
+      }
     }
   }
 

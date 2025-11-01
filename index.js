@@ -4,13 +4,13 @@ const pkg = require('./package.json');
 const fs = require('fs');
 const path = require('path');
 
-// Verificar e configurar chave secreta na primeira execução
+// Check and configure secret key on first execution
 const configPath = path.join(process.cwd(), 'artghos.config.json');
 if (!fs.existsSync(configPath)) {
-  console.log('\n🔐 Configuração inicial de segurança do Artghos');
-  console.log('Gerando chave secreta para assinatura digital de pacotes...');
+  console.log('\n🔐 Initial Artghos security configuration');
+  console.log('Generating secret key for digital package signing...');
   ReqArt.ArtPacker.setupSecretKey();
-  console.log('✅ Configuração concluída! Esta chave será usada para todos os pacotes.\n');
+  console.log('✅ Configuration complete! This key will be used for all packages.\n');
 }
 
 const args = process.argv.slice(2);
@@ -23,45 +23,45 @@ if (command === '--version' || command === '-v') {
 
 if (command === '--help' || command === '-h') {
   console.log(`
-Artghos v${pkg.version} - Sistema de empacotamento seguro de pacotes Node.js
+Artghos v${pkg.version} - Secure packaging system for Node.js packages
 
-Uso:
-  artghos install <pacote> [versao]   Baixa e empacota um pacote npm
-  artghos install <p1> <p2> ...       Empacota múltiplos pacotes (ex.: express lodash bcrypt)
-  artghos install nome@versao         Forma compacta (ex.: express@4.18.0)
-  artghos --version, -v               Mostra a versão
-  artghos --help, -h                  Mostra esta ajuda
+Usage:
+  artghos install <package> [version]   Downloads and packages an npm package
+  artghos install <p1> <p2> ...         Packages multiple packages (e.g.: express lodash bcrypt)
+  artghos install name@version          Compact form (e.g.: express@4.18.0)
+  artghos --version, -v                 Shows version
+  artghos --help, -h                    Shows this help
 
-Flags de segurança:
-  --force-pack                        Força empacotamento ignorando avisos
-  --force-unpack                      Força desempacotamento ignorando avisos
+Security flags:
+  --force-pack                          Forces packaging ignoring warnings
+  --force-unpack                        Forces unpacking ignoring warnings
 
-Exemplos:
+Examples:
   artghos install lodash
   artghos install express 4.18.0
   artghos install axios latest
   artghos install express --force-pack
 
-🔒 Segurança:
-  Todos os pacotes são verificados quanto a conteúdo malicioso
-  e assinados digitalmente para garantir integridade.
+🔒 Security:
+  All packages are checked for malicious content
+  and digitally signed to ensure integrity.
   `);
   process.exit(0);
 }
 
 if (command !== 'install' || !args[1]) {
-  console.log('Uso: artghos install <pacote> [versao]');
-  console.log('      artghos install <p1> <p2> ...');
-  console.log('      artghos install nome@versao');
-  console.log('Use artghos --help para mais informações');
+  console.log('Usage: artghos install <package> [version]');
+  console.log('       artghos install <p1> <p2> ...');
+  console.log('       artghos install name@version');
+  console.log('Use artghos --help for more information');
   process.exit(1);
 }
 
-// Suporta múltiplos pacotes e formas nome@versao
+// Supports multiple packages and name@version forms
 const packages = [];
 for (let i = 1; i < args.length; i++) {
   const token = args[i];
-  if (token.startsWith('--')) continue; // flags são lidas por Artghos.js via process.argv
+  if (token.startsWith('--')) continue; // flags are read by Artghos.js via process.argv
   const atIdx = token.indexOf('@');
   if (atIdx > 0) {
     const name = token.slice(0, atIdx);
@@ -73,7 +73,7 @@ for (let i = 1; i < args.length; i++) {
 }
 
 if (packages.length === 0) {
-  console.log('Nenhum pacote válido informado.');
+  console.log('No valid packages specified.');
   process.exit(1);
 }
 
@@ -81,12 +81,12 @@ if (packages.length === 0) {
   let ok = 0;
   for (const { name, version } of packages) {
     try {
-      console.log(`Empacotando ${name}@${version}...`);
+      console.log(`Packaging ${name}@${version}...`);
       const out = ReqArt.install(name, version);
-      console.log(`✓ Concluído: ${out}`);
+      console.log(`✓ Completed: ${out}`);
       ok++;
     } catch (err) {
-      console.error(`Erro ao empacotar ${name}: ${err.message}`);
+      console.error(`Error packaging ${name}: ${err.message}`);
     }
   }
   if (ok === 0) process.exit(1);
