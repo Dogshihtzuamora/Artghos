@@ -583,9 +583,12 @@ function ReqArt(artPath) {
   const entryPoint = path.resolve(tempExtractDir, pkgJson.main || 'index.js');
 
   // Verificar se o módulo é ESM ou CommonJS
-  // Tratamento especial para o axios que deve ser tratado como CommonJS
+  // Tratamento especial para pacotes que devem ser tratados como CommonJS
   const pkgName = path.basename(tempExtractDir);
-  const isESM = pkgName !== 'axios' && (
+  // Lista de pacotes conhecidos que devem ser tratados como CommonJS mesmo que pareçam ESM
+  const commonJSPackages = ['axios', 'lodash', 'moment', 'uuid', 'react', 'react-dom', 'chalk'];
+  // Chalk será tratado de forma especial no proxy
+  const isESM = !commonJSPackages.includes(pkgName) && (
                 pkgJson.type === 'module' || 
                 entryPoint.endsWith('.mjs') || 
                 (fs.existsSync(entryPoint) && 
@@ -656,40 +659,74 @@ function ReqArt(artPath) {
     // Para módulos CommonJS, usar require com contexto do entryPoint
     const customRequire = createRequire(entryPoint);
     loadedModule = customRequire(entryPoint);
-
-    // Tratamento especial para axios e outros módulos com exports.default
-    if (loadedModule && typeof loadedModule === 'object' && loadedModule.default) {
-      // Se for o axios ou outro módulo com default
-      if (typeof loadedModule.default === 'function') {
-        // Para funções como axios, criar uma função que mantém as propriedades
-        const wrappedFunction = function(...args) {
-          return loadedModule.default(...args);
-        };
-        
-        // Copiar todas as propriedades do default para a função
-        Object.assign(wrappedFunction, loadedModule.default);
-        
-        // Copiar todas as propriedades do módulo original
-        Object.keys(loadedModule).forEach(key => {
-          if (key !== 'default') {
-            wrappedFunction[key] = loadedModule[key];
-          }
-        });
-        
-        return wrappedFunction;
-      } else if (typeof loadedModule.default === 'object' && loadedModule.default !== null) {
-        // Para objetos, combinar as propriedades
-        const combinedModule = {...loadedModule};
-        
-        // Adicionar todas as propriedades do default ao módulo principal
-        Object.keys(loadedModule.default).forEach(key => {
-          if (!(key in combinedModule)) {
-            combinedModule[key] = loadedModule.default[key];
-          }
-        });
-        
-        return combinedModule;
+    
+    // Tratamento especial para o pacote chalk
+    if (pkgName === 'chalk') {
+      // Se for o chalk e tiver default, retornar o default diretamente
+      if (loadedModule && loadedModule.default && typeof loadedModule.default === 'function') {
+        return loadedModule.default;
       }
+    }
+
+    // Tratamento universal para módulos com exports.default
+    if (loadedModule && typeof loadedModule === 'object') {
+      // Criar um proxy inteligente que trata todos os tipos de módulos
+      return new Proxy(loadedModule, {
+        get(target, prop) {
+          // Verificar se a propriedade existe no objeto principal
+          if (prop in target) {
+            // Se a propriedade não for default, retornar diretamente
+            if (prop !== 'default') {
+              return target[prop];
+            }
+          }
+          
+          // Se tiver um default e a propriedade existir no default
+          if (target.default && typeof target.default === 'object' && 
+              prop in target.default && prop !== 'default') {
+            return target.default[prop];
+          }
+          
+          // Se a propriedade for default, retornar o default
+          if (prop === 'default') {
+            return target.default;
+          }
+          
+          // Se o default for uma função e a propriedade não existir no objeto principal
+          if (target.default && typeof target.default === 'function' && !(prop in target)) {
+            // Verificar se a propriedade existe no prototype da função
+            const defaultProto = Object.getPrototypeOf(target.default);
+            if (prop in defaultProto) {
+              return defaultProto[prop];
+            }
+          }
+          
+          // Caso especial para pacotes como chalk que têm métodos no default
+          if (target.default && typeof target.default === 'object' && !(prop in target)) {
+            return target.default[prop];
+          }
+          
+          return undefined;
+        },
+        apply(target, thisArg, args) {
+          // Se o módulo tiver um default que é uma função, chamá-la
+          if (typeof target.default === 'function') {
+            return target.default.apply(thisArg, args);
+          }
+          
+          // Se o próprio módulo for uma função, chamá-la
+          if (typeof target === 'function') {
+            return target.apply(thisArg, args);
+          }
+          
+          throw new Error('O módulo não é uma função e não tem um default que seja uma função');
+        },
+        // Permitir verificação de propriedades com 'in'
+        has(target, prop) {
+          return prop in target || 
+                 (target.default && typeof target.default === 'object' && prop in target.default);
+        }
+      });
     }
   }
 
