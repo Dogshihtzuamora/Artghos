@@ -17,6 +17,40 @@ const COLORS = {
 };
 
 class ArtPacker {
+  // Gera uma chave secreta aleatória para uso em produção
+  static generateSecretKey(length = 48) {
+    return crypto.randomBytes(length).toString('hex');
+  }
+
+  // Configura a chave secreta no arquivo de configuração
+  static setupSecretKey() {
+    const cfgPath = path.join(process.cwd(), 'artghos.config.json');
+    let config = {};
+    
+    // Verificar se o arquivo já existe
+    if (fs.existsSync(cfgPath)) {
+      try {
+        config = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      } catch (e) {
+        // Ignorar erro de parse, criar novo arquivo
+      }
+    }
+    
+    // Gerar nova chave se não existir
+    if (!config.secretKey || config.secretKey.length < 32) {
+      const newKey = this.generateSecretKey();
+      config.secretKey = newKey;
+      
+      // Salvar configuração
+      fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2), 'utf8');
+      console.log(`${COLORS.green}✓ Chave secreta gerada e salva em ${cfgPath}${COLORS.reset}`);
+      console.log(`${COLORS.cyan}ℹ️ Esta chave será usada para assinar todos os pacotes .art${COLORS.reset}`);
+      return newKey;
+    }
+    
+    return config.secretKey;
+  }
+
   // Chave secreta para assinatura (em produção, deve ser armazenada de forma segura)
   static getSecretKey() {
     // Em produção, isso deve vir de uma variável de ambiente ou arquivo seguro
@@ -33,9 +67,14 @@ class ArtPacker {
       }
     } catch (_) {}
 
+    // Se não encontrou chave, configurar automaticamente
+    if (!process.env.ARTGHOS_NO_AUTO_CONFIG) {
+      return this.setupSecretKey();
+    }
+
     // Aviso: usando chave padrão apenas para desenvolvimento
     console.warn(`${COLORS.yellow}⚠️ Usando chave de assinatura padrão de desenvolvimento. Defina ARTGHOS_SECRET_KEY ou artghos.config.json.${COLORS.reset}`);
-    return 'artghos-security-key-2023';
+    return 'artghos-security-key-9999';
   }
 
   // Gera uma assinatura digital para o conteúdo

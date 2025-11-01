@@ -1,142 +1,169 @@
 # Artghos
 
-Sistema de empacotamento e carregamento de pacotes Node.js em formato `.art` com suporte a ESM/CommonJS e sistema de segurança avançado.
+Node.js package bundling and loading system in `.art` format with ESM/CommonJS support and advanced security features.
 
-## 📦 O que é?
+## 📦 What is it?
 
-Artghos permite empacotar qualquer pacote npm (com todas suas dependências) em um único arquivo `.art` compactado, que pode ser distribuído e carregado sem precisar de internet ou npm install. Agora com suporte completo para módulos ESM e CommonJS, além de um sistema de segurança robusto contra malware.
+Artghos allows you to bundle any npm package (with all its dependencies) into a single compressed `.art` file, which can be distributed and loaded without internet access or npm install. Now with full support for ESM and CommonJS modules, plus a robust security system against malware.
 
-## 🚀 Instalação
+## 🚀 Installation
 
-### Uso Global
+### Global Usage
 ```bash
 npm install -g artghos
 ```
 
-### Uso Local
+### Local Usage
 ```bash
 npm install artghos
 ```
 
-## 📝 Como usar
+## 📝 How to use
 
-### Criar um pacote .art
+### Create an .art package
 
 ```bash
-artghos install <nome-do-pacote> [versao]
+artghos install <package-name> [version]
 ```
 
-**Exemplos:**
+**Examples:**
 ```bash
 artghos install express
 artghos install express 4.18.0
 artghos install lodash latest
 artghos install hyperswarm
+ 
+# Multiple packages in a single command
+artghos install express lodash bcrypt
+
+# Compact form with version
+artghos install express@4.18.0 lodash@latest
 ```
 
-Isso gera um arquivo `.art` em `./art-packages/`
+This generates an `.art` file in `./art-packages/`
 
-### Carregar um pacote .art
+### Load an .art package
 
 ```javascript
 const ReqArt = require('artghos');
 
-// Forma simplificada (busca automaticamente em art-packages/)
+// Simplified form (automatically searches in art-packages/)
 const express = ReqArt('express');
 
-// Ou com caminho completo
+// Or with full path
 const lodash = ReqArt('./art-packages/lodash.art');
 
-// Usar normalmente
+// Use normally
 const app = express();
-app.get('/', (req, res) => res.send('Olá via .art!'));
+app.get('/', (req, res) => res.send('Hello via .art!'));
 app.listen(3000);
 ```
 
-### Observações importantes
-- `express` possui whitelist de segurança ativa: arquivos marcados como “alto risco” dentro do pacote e em `node_modules/` são escritos e o processo não aborta. Os avisos permanecem nos logs.
-- Para outros pacotes, se o scanner marcar alto risco, execute seu script com `--force-unpack` para permitir a escrita dos arquivos e prosseguir.
+### Important notes
+- `express` has an active security whitelist: files marked as "high risk" within the package and in `node_modules/` are written and the process doesn't abort. Warnings remain in the logs.
+- For other packages, if the scanner marks high risk, run your script with `--force-unpack` to allow writing the files and proceed.
 
-## ✨ Vantagens
+## ✨ Advantages
 
-- ✅ **Portável**: Um único arquivo com tudo incluído
-- ✅ **Offline**: Funciona sem internet ou npm
-- ✅ **Zero dependências**: Usa apenas módulos nativos do Node.js
-- ✅ **Cache inteligente**: Carregamento instantâneo após primeira vez
-- ✅ **Compactação gzip**: Arquivos menores e eficientes
-- ✅ **Suporte completo a ESM/CommonJS**: Detecção automática e carregamento dinâmico
-- ✅ **Sistema de segurança avançado**: Proteção contra malware e adulteração
-- ✅ **Assinatura digital**: Verificação de integridade dos pacotes
-- ✅ **Análise contextual**: Detecção inteligente de código malicioso
+- ✅ **Portable**: A single file with everything included
+- ✅ **Offline**: Works without internet or npm
+- ✅ **Zero dependencies**: Uses only native Node.js modules
+- ✅ **Smart caching**: Instant loading after first time
+- ✅ **Gzip compression**: Smaller and efficient files
+- ✅ **Full ESM/CommonJS support**: Automatic detection and dynamic loading
+- ✅ **Advanced security system**: Protection against malware and tampering
+- ✅ **Digital signature**: Package integrity verification
+- ✅ **Contextual analysis**: Intelligent malicious code detection
 
-## 🔒 Sistema de Segurança
+## 🔒 Security System
 
-Artghos inclui um sistema de segurança avançado para proteger contra malware:
+Artghos includes an advanced security system to protect against malware:
 
-- **Assinatura digital**: Cada arquivo .art é assinado digitalmente para garantir integridade
-- **Verificação de integridade**: Detecta qualquer adulteração nos pacotes
-- **Análise contextual**: Sistema inteligente que diferencia código legítimo de malicioso
-- **Pontuação de risco**: Avaliação baseada em múltiplos fatores de segurança
-- **Whitelist de bibliotecas**: Permite uso legítimo de APIs sensíveis por bibliotecas confiáveis
+- **Digital signature**: Each .art file is digitally signed to ensure integrity
+- **Integrity verification**: Detects any tampering in packages
+- **Contextual analysis**: Intelligent system that differentiates legitimate code from malicious
+- **Risk scoring**: Assessment based on multiple security factors
+- **Library whitelist**: Allows legitimate use of sensitive APIs by trusted libraries
 
-### Flags de segurança
+### Security flags
 
 ```bash
-# Forçar empacotamento mesmo com avisos de segurança
+# Force packaging even with security warnings
 artghos install express --force-pack
 
-# Forçar desempacotamento mesmo com avisos de segurança
-node seu-script.js --force-unpack
+# Force unpacking even with security warnings
+node your-script.js --force-unpack
 ```
 
-### Assinatura Digital e Chave Secreta
-- Todo `.art` é assinado digitalmente (HMAC-SHA256) durante o empacotamento.
-- Prioridade da chave secreta:
-  1. `ARTGHOS_SECRET_KEY` (variável de ambiente)
-  2. `artghos.config.json` (na raiz)
-  3. Chave padrão de desenvolvimento (gera aviso)
-- Após empacotar, a assinatura é verificada para confirmar integridade.
+### Digital Signature and Secret Key
+- Every `.art` is digitally signed (HMAC-SHA256) during packaging.
+- On first execution, a random secret key is automatically generated.
+- Secret key priority:
+  1. `ARTGHOS_SECRET_KEY` (environment variable)
+  2. `artghos.config.json` (in the root, automatically generated)
+  3. Default development key (only if previous options fail)
+- After packaging, the signature is verified to confirm integrity.
 
-### Comportamento com Conteúdo Suspeito
-- Empacotamento: arquivos de alto risco abortam, a menos que `--force-pack` seja usado.
-- Desempacotamento:
-  - Por padrão, arquivos de alto risco abortam; com `--force-unpack`, eles são escritos.
-  - Para `express`, há whitelist: desempacota sem `--force-unpack`, mantendo avisos para auditoria.
+The `artghos.config.json` file is automatically created on first execution:
+```json
+{
+  "secretKey": "automatically-generated-random-key"
+}
+```
 
-## 🔄 Suporte a ESM e CommonJS
+#### Manual Key Configuration (optional)
+If you prefer to define your own key, you can:
+1. Edit the `artghos.config.json` file directly
+2. Set the `ARTGHOS_SECRET_KEY` environment variable
 
-Artghos agora suporta completamente tanto módulos CommonJS quanto ESM:
+```bash
+# PowerShell (current session)
+$env:ARTGHOS_SECRET_KEY="my-custom-key"
 
-### Módulos CommonJS (tradicional)
+# PowerShell (permanent)
+setx ARTGHOS_SECRET_KEY "my-custom-key"
+```
+
+### Behavior with Suspicious Content
+- Packaging: high-risk files abort, unless `--force-pack` is used.
+- Unpacking:
+  - By default, high-risk files abort; with `--force-unpack`, they are written.
+  - For `express`, there's a whitelist: unpacks without `--force-unpack`, keeping warnings for auditing.
+
+## 🔄 ESM and CommonJS Support
+
+Artghos now fully supports both CommonJS and ESM modules:
+
+### CommonJS Modules (traditional)
 ```javascript
 const ReqArt = require('artghos');
 const lodash = ReqArt('lodash');
 console.log(lodash.chunk([1, 2, 3, 4], 2));
 ```
 
-### Módulos ESM (import/export)
+### ESM Modules (import/export)
 ```javascript
 const ReqArt = require('artghos');
 const chalk = ReqArt('chalk');
 
-// Para módulos ESM, use o método import()
+// For ESM modules, use the import() method
 const chalkModule = await chalk.import();
-console.log(chalkModule.default.green('Sucesso!'));
+console.log(chalkModule.default.green('Success!'));
 ```
 
-### Resolução de Dependências e Diretório Temporário
-- O carregamento usa `createRequire` para garantir resolução de módulos CommonJS relativa ao ponto de entrada.
-- O diretório temporário de extração (`art-packages/.reqart-temp/<pacote>`) permanece acessível até o encerramento do processo, permitindo resolver dependências sob demanda.
+### Dependency Resolution and Temporary Directory
+- Loading uses `createRequire` to ensure CommonJS module resolution relative to the entry point.
+- The temporary extraction directory (`art-packages/.reqart-temp/<package>`) remains accessible until the process terminates, allowing on-demand dependency resolution.
 
-## 📖 Exemplos
+## 📖 Examples
 
-### Exemplo com lodash (CommonJS)
+### Example with lodash (CommonJS)
 
 ```javascript
-// Instalar lodash como .art
+// Install lodash as .art
 // $ artghos install lodash
 
-// Usar lodash de um arquivo .art
+// Use lodash from an .art file
 const ReqArt = require('artghos');
 const _ = ReqArt('lodash');
 
@@ -144,13 +171,13 @@ console.log(_.chunk(['a', 'b', 'c', 'd'], 2));
 // => [['a', 'b'], ['c', 'd']]
 ```
 
-### Exemplo com express (CommonJS)
+### Example with express (CommonJS)
 
 ```javascript
-// Instalar express como .art
+// Install express as .art
 // $ artghos install express
 
-// Usar express de um arquivo .art
+// Use express from an .art file
 const ReqArt = require('artghos');
 const express = ReqArt('express');
 
@@ -160,17 +187,17 @@ app.get('/', (req, res) => {
 });
 
 app.listen(3000, () => {
-  console.log('Servidor rodando na porta 3000');
+  console.log('Server running on port 3000');
 });
 ```
 
-### Exemplo com axios (CommonJS)
+### Example with axios (CommonJS)
 
 ```javascript
-// Instalar axios como .art
+// Install axios as .art
 // $ artghos install axios
 
-// Usar axios de um arquivo .art
+// Use axios from an .art file
 const ReqArt = require('artghos');
 const axios = ReqArt('axios');
 
@@ -182,112 +209,97 @@ async function getData() {
 getData();
 ```
 
-### Exemplo com React (ESM)
+### Example with React (ESM)
 
 ```javascript
-// Instalar react como .art
+// Install react as .art
 // $ artghos install react
 
-// Usar react (ESM) de um arquivo .art
+// Use react (ESM) from an .art file
 const ReqArt = require('artghos');
 const react = ReqArt('react');
 
-// Para módulos ESM, use o método import()
-async function exemplo() {
+// For ESM modules, use the import() method
+async function example() {
   const React = await react.import();
   
-  // Agora você pode usar React normalmente
+  // Now you can use React normally
   const element = React.createElement('div', null, 'Hello, world!');
   console.log(element);
 }
 
-exemplo();
+example();
 ```
 
-### Exemplo com biblioteca confiável usando APIs sensíveis
+### Example with trusted library using sensitive APIs
 
 ```javascript
-// Instalar uma biblioteca confiável que usa child_process
+// Install a trusted library that uses child_process
 // $ artghos install cross-env
 
-// O sistema de segurança permitirá o empacotamento por ser uma biblioteca confiável
+// The security system will allow packaging because it's a trusted library
 const ReqArt = require('artghos');
 const crossEnv = ReqArt('cross-env');
 
-// Use normalmente
+// Use normally
 ```
 
-### Exemplo com flags de segurança
+### Example with security flags
 
 ```bash
-# Empacotar forçando mesmo com avisos de segurança
+# Package forcing even with security warnings
 artghos install lodash latest --force-pack
 
-# Carregar forçando escrita de arquivos marcados como alto risco
-node seu-script.js --force-unpack
+# Load forcing writing of files marked as high risk
+node your-script.js --force-unpack
 ```
 
 ## ⚡ Performance
 
-O Artghos foi projetado para ser rápido e eficiente:
+Artghos was designed to be fast and efficient:
 
-- **Cache inteligente**: Após o primeiro carregamento, os módulos são armazenados em cache
-- **Compactação eficiente**: Reduz o tamanho dos pacotes sem comprometer a velocidade
-- **Carregamento seletivo**: Carrega apenas os módulos necessários quando solicitados
+- **Smart caching**: After the first load, modules are stored in cache
+- **Efficient compression**: Reduces package size without compromising speed
+- **Selective loading**: Loads only the necessary modules when requested
 
 ```
-Primeira carga (sem cache):  ~400-500ms
-Cargas seguintes (cache):    ~0.03ms (13,000x mais rápido!)
+First load (no cache):     ~400-500ms
+Subsequent loads (cache):  ~0.03ms (13,000x faster!)
 ```
 
-O cache em memória torna carregamentos subsequentes praticamente instantâneos.
+In-memory caching makes subsequent loads practically instantaneous.
 
-## 📄 Licença
+## 📄 License
 
 MIT © Artghos
 
-## 🎯 Casos de Uso
+## 🎯 Use Cases
 
-- 📦 Distribuir aplicações com dependências incluídas
-- 🌐 Desenvolvimento offline
-- 🚀 Deploy simplificado (copiar um arquivo vs npm install)
-- 💾 Backup de versões específicas de pacotes
-- 🔒 Ambientes sem acesso ao npm registry
-- 🎮 Plugins e extensões auto-contidas
+- 📦 Distribute applications with included dependencies
+- 🌐 Offline development
+- 🚀 Simplified deployment (copy a file vs npm install)
+- 💾 Backup specific package versions
+- 🔒 Environments without access to npm registry
+- 🎮 Self-contained plugins and extensions
 
-## 🛠️ Requisitos
+## 🛠️ Requirements
 
-- Node.js v14 ou superior
-- npm (apenas para criar os pacotes .art)
+- Node.js v14 or higher
+- npm (only for creating .art packages)
 
-## 📁 Estrutura de Arquivos
+## 📁 File Structure
 
 ```
-seu-projeto/
-├── art-packages/           # Pacotes .art criados
+your-project/
+├── art-packages/           # Created .art packages
 │   ├── lodash.art
 │   ├── express.art
 │   └── axios.art
-└── seu-app.js
+└── your-app.js
 ```
 
-## 🔧 Como Funciona
+## 🔧 How It Works
 
-1. **Criação**: Baixa pacote do npm → empacota com dependências → comprime com gzip
-2. **Carregamento**: Descomprime → extrai arquivos → carrega módulo → mantém em cache
-3. **Cache**: Módulos carregados ficam em memória para acesso instantâneo
-
-## ⚠️ Notas
-
-- Pacotes `.art` incluem todas as dependências, podendo ficar grandes
-- Cache em memória é limpo quando o processo Node.js encerra
-- Compatível com pacotes CommonJS e ES Modules
-- Não requer `tar` ou outras dependências externas
-
-## 📄 Licença
-
-MIT
-
----
-
-**Feito com ❤️ para facilitar o compartilhamento de pacotes Node.js**
+1. **Creation**: Downloads npm package → bundles with dependencies → compresses with gzip
+2. **Loading**: Decompresses → extracts files → loads module → keeps in cache
+3. **Cache**: Loaded modules stay in memory for instant access
